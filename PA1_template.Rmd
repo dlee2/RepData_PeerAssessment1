@@ -1,0 +1,165 @@
+#Analyzing Quantified Self Data
+
+
+
+###Load ggplot2 to create visualizations
+
+```{r, echo = TRUE}
+suppressWarnings(library(ggplot2))
+library(knitr)
+```
+
+First we will download and read the data into RStudio.
+
+
+
+```{r,echo = TRUE}
+url <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip"
+if(!file.exists("fitbit.zip")) {
+  download.file(url, "fitbit.zip",method = "curl")
+  unzip("fitbit.zip")
+}
+data <- read.csv("activity.csv", header = TRUE, colClasses = c("numeric","character","numeric"))
+
+```
+
+
+
+###Perform some preprocessing steps to the data
+
+```{r, echo = TRUE}
+data$date <- as.Date(data$date, format = "%Y-%m-%d")
+data$interval <- as.factor(data$interval)
+```
+
+
+To get a general overview about the data, lets call summary on the dataset.
+
+
+```{r, echo = TRUE}
+summary(data)
+```
+
+
+
+###What is mean total number of steps taken per day?
+There appears to be three different features of the dataset: steps, date and interval. We can start off by looking at some interesting things about the data. For example, lets first calculate the total number of steps per day.
+
+```{r, echo = TRUE}
+stepsByDay <- aggregate(steps~date, data, sum)
+stepsByDay
+```
+
+Now we'll make a histogram of the steps per day.
+
+```{r, echo = TRUE}
+ggplot(stepsByDay, aes(steps)) + geom_histogram(fill = "red", bin = 1000) + ggtitle("Histogram of Steps Taken Per Day") + ylab("Count") + xlab("Number of Steps Taken Per Day")
+```
+
+
+Now, we'll calculate the mean and median of the total number of steps per day.
+
+
+```{r, echo = TRUE} 
+meanStepsByDay <- mean(stepsByDay$steps, na.rm = TRUE)
+medianStepsByDay <- median(stepsByDay$steps, na.rm = TRUE)
+meanStepsByDay
+medianStepsByDay
+```
+
+It looks like the mean number of steps per day is 10766.19 and the median steps per day is 10765.
+
+
+
+###What is the average daily activity pattern?
+
+Make a time series plot of the 5-minute interval and the average number of steps taken, averaged across all days.
+
+
+
+```{r, echo = TRUE}
+steps_per_interval <- aggregate(data$steps, by = list(data$interval), mean, na.rm = TRUE)
+colnames(steps_per_interval) <- c("interval","steps")
+steps_per_interval$interval <-  as.integer(levels(steps_per_interval$interval)[steps_per_interval$interval])
+ggplot(steps_per_interval, aes(x = interval, y = steps)) + geom_line(col = "black") + xlab("Interval") + ylab("Steps") + ggtitle("Average Daily Activity Pattern")
+```
+
+Now, we find the 5-minute interval that contains the maximum number of steps.
+
+```{r, echo = TRUE}
+index <- which.max(steps_per_interval$steps)
+maxInterval <- steps_per_interval[index,]
+maxInterval
+```
+The 835th interval has the maximum number of steps with 206 steps.
+
+###Imputing missing values
+
+Calculate the total number of NA's in the dataset.
+```{r, echo = TRUE}
+sum(is.na(data$steps))
+```
+
+
+There are 2304 rows with NA's. We will replace the NA's with the median number of steps.
+
+```{r,echo = TRUE}
+imputedData <- data
+for(i in 1:nrow(imputedData)) {
+      if(is.na(imputedData$steps[i]) ==TRUE)
+        imputedData$steps[i] <- steps_per_interval[which(imputedData$interval[i] == steps_per_interval$interval),]$steps
+}
+head(imputedData)
+```
+
+Make a histogram of the total number of steps taken each day and calculate and report the mean and median total number of steps taken per day.
+
+```{r, echo = TRUE}
+imputedStepsPerDay <- aggregate(steps~date, imputedData, sum)
+ggplot(imputedStepsPerDay, aes(steps)) + geom_bar(fill = "blue", bin = 1000) + ggtitle("Total Number of Steps per day") + xlab("Number of Steps Per Day") + ylab("Count")
+newMean <- mean(imputedStepsPerDay$steps)
+newMedian <- median(imputedStepsPerDay$steps)
+newMean
+newMedian
+```
+The mean and median of the new dataset are both 10766.19.
+
+###Do these values differ from the estimages from the first part of the assignment?
+
+They differ, but only by a slight amount. The mean's have not changed, however, the median of the imputed dataset is 1.19 higher than the dataset with NA's.
+
+###What is the impact of imputing missing data on the estimates of the total daily number of steps?
+
+As you can see from the analysis above, imputing the missing values had no affect on the mean value, but had shiften the mean value slightly. 
+
+###Are there differences in activity patterns between weekdays and weekends?
+
+```{r, echo = TRUE}
+imputedData$date <- as.factor(weekdays(imputedData$date))
+imputedData$dayOfWeek<- numeric(length = nrow(imputedData))
+for (i in 1:nrow(imputedData)) {
+      if(imputedData$date[i] %in% c("Saturday","Sunday")){
+            imputedData$dayOfWeek[i] <- "Weekend"
+           }
+         else {
+           imputedData$dayOfWeek[i] <- "Weekday"
+           
+         }
+}
+imputedData$dayOfWeek <- as.factor(imputedData$dayOfWeek)
+avgSteps <- aggregate(imputedData$steps, by = list(interval = imputedData$interval, weekday = imputedData$dayOfWeek), FUN = "mean")
+avgSteps$weekday <- as.factor(avgSteps$weekday)
+levels(avgSteps$weekday) <- c("Weekday","Weekend")
+names(avgSteps) <- c("interval","weekday","mean")
+library(lattice)
+xyplot(avgSteps$mean ~ avgSteps$interval | avgSteps$weekday, layout = c(1,2), type = "l", xlab = "Interval", ylab = "Number of Steps")
+```
+
+As you can see, from the graph, it appears that people tend to take more steps on weekdays.
+
+
+There seems to be some differences between weekdays and weekends. The plot shows that people tend to take more steps on weekdays than on weekends.
+
+```{r, echo = TRUE}
+knit2html("PA1_template.Rmd")
+```
